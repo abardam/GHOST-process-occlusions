@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Process_occlusions_GL", "Process_occlusions_GL\Process_occlusions_GL.vcxproj", "{A1F1B3D3-06E7-43F2-A830-36D91D56C62A}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Cluster_frames", "Cluster_frames\Cluster_frames.vcxproj", "{DA7529AA-D68B-4FA7-A6D5-6E1DA3C46547}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1F1B3D3-06E7-43F2-A830-36D91D56C62A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A1F1B3D3-06E7-43F2-A830-36D91D56C62A}.Debug|Win32.Build.0 = Debug|Win32
+		{A1F1B3D3-06E7-43F2-A830-36D91D56C62A}.Release|Win32.ActiveCfg = Release|Win32
+		{A1F1B3D3-06E7-43F2-A830-36D91D56C62A}.Release|Win32.Build.0 = Release|Win32
+		{DA7529AA-D68B-4FA7-A6D5-6E1DA3C46547}.Debug|Win32.ActiveCfg = Debug|Win32
+		{DA7529AA-D68B-4FA7-A6D5-6E1DA3C46547}.Debug|Win32.Build.0 = Debug|Win32
+		{DA7529AA-D68B-4FA7-A6D5-6E1DA3C46547}.Release|Win32.ActiveCfg = Release|Win32
+		{DA7529AA-D68B-4FA7-A6D5-6E1DA3C46547}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
