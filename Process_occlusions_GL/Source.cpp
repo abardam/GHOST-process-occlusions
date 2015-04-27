@@ -22,8 +22,10 @@
 #include <glcv.h>
 #include <gh_occlusion.h>
 
-float zNear = 1.0, zFar = 10.0;
+float zNear = 0.01, zFar = 5.0;
 
+#define USE_KINECT_INTRINSICS 1
+float ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0;
 
 //manual zoom
 float zoom = 1.f;
@@ -74,8 +76,16 @@ void reshape(int width, int height)
 
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(fieldOfView, aspectRatio,
-		zNear, zFar);  /* Znear and Zfar */
+
+	if (USE_KINECT_INTRINSICS){
+		int viewport[4];
+		cv::Mat proj_t = build_opengl_projection_for_intrinsics(viewport, ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0, width, height, zNear, zFar).t();
+		glMultMatrixf(proj_t.ptr<float>());
+	}
+	else{
+		gluPerspective(fieldOfView, aspectRatio,
+			zNear, zFar);  /* Znear and Zfar */
+	}
 	glViewport(0, 0, width, height);
 	win_width = width;
 	win_height = height;
@@ -196,6 +206,17 @@ void display(void)
 /* ---------------------------------------------------------------------------- */
 int main(int argc, char **argv)
 {
+
+	if (USE_KINECT_INTRINSICS){
+		cv::FileStorage fs;
+		fs.open("out_cameramatrix_test.yml", cv::FileStorage::READ);
+		fs["alpha"] >> ki_alpha;
+		fs["beta"] >> ki_beta;
+		fs["gamma"] >> ki_gamma;
+		fs["u"] >> ki_u0;
+		fs["v"] >> ki_v0;
+	}
+
 	if (argc <= 2){
 		printf("Please enter directory and voxel reconstruct file\n");
 		return 0;
