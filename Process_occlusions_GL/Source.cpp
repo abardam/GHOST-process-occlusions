@@ -22,9 +22,9 @@
 #include <glcv.h>
 #include <gh_occlusion.h>
 
-float zNear = 0.01, zFar = 5.0;
+float zNear = 0.1, zFar = 15.0;
 
-#define USE_KINECT_INTRINSICS 1
+#define USE_KINECT_INTRINSICS 0
 float ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0;
 
 //manual zoom
@@ -129,18 +129,20 @@ void display(void)
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
+	
+	static int anim_frame = 0;
+
 	{
+		opengl_modelview = frame_datas[anim_frame].mmCameraPose;
 		cv::Mat opengl_modelview_t = opengl_modelview.t();
 		glMultMatrixf(opengl_modelview_t.ptr<float>());
 	}
-	
-	static int anim_frame = 0;
 
 	glEnableClientState(GL_VERTEX_ARRAY);
 
 	for (int i = 0; i < bpdv.size(); ++i){
 		glPushMatrix();
-		cv::Mat transform_t = (get_bodypart_transform(bpdv[i], snhmaps[anim_frame]) * get_voxel_transform(voxels[i].width, voxels[i].height, voxels[i].depth, voxel_size)).t();
+		cv::Mat transform_t = (get_bodypart_transform(bpdv[i], snhmaps[anim_frame], cv::Mat::eye(4,4,CV_32F)) * get_voxel_transform(voxels[i].width, voxels[i].height, voxels[i].depth, voxel_size)).t();
 		glMultMatrixf(transform_t.ptr<float>());
 
 		glVertexPointer(3, GL_FLOAT, 0, triangle_vertices[i].data());
@@ -270,7 +272,10 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < frame_datas.size(); ++i){
 		snhmaps.push_back(SkeletonNodeHardMap());
-		cv_draw_and_build_skeleton(&frame_datas[i].mmRoot, frame_datas[i].mmCameraPose, frame_datas[i].mmCameraMatrix, &snhmaps[i]);
+		cv::Mat debug_im = frame_datas[i].mmColor.clone();
+		cv_draw_and_build_skeleton(&frame_datas[i].mmRoot, cv::Mat::eye(4, 4, CV_32F), frame_datas[i].mmCameraMatrix, frame_datas[i].mmCameraPose, &snhmaps[i]);// , debug_im);
+		//cv::imshow("debug_im", debug_im);
+		//cv::waitKey(20);
 	}
 
 	load_voxels(voxel_recons_path, cylinders, voxels, TSDF_array, weight_array, voxel_size);
