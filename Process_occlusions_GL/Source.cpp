@@ -22,9 +22,9 @@
 #include <glcv.h>
 #include <gh_occlusion.h>
 
-float zNear = 0.1, zFar = 15.0;
+float zNear = 0.1, zFar = 50.0;
 
-#define USE_KINECT_INTRINSICS 0
+#define USE_KINECT_INTRINSICS 1
 float ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0;
 
 //manual zoom
@@ -79,7 +79,7 @@ void reshape(int width, int height)
 
 	if (USE_KINECT_INTRINSICS){
 		int viewport[4];
-		cv::Mat proj_t = build_opengl_projection_for_intrinsics(viewport, ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0, width, height, zNear, zFar).t();
+		cv::Mat proj_t = build_opengl_projection_for_intrinsics(viewport, -ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0, width, height, zNear, zFar).t(); //note: ki_alpha is negative
 		glMultMatrixf(proj_t.ptr<float>());
 	}
 	else{
@@ -137,6 +137,8 @@ void display(void)
 		cv::Mat opengl_modelview_t = opengl_modelview.t();
 		glMultMatrixf(opengl_modelview_t.ptr<float>());
 	}
+
+
 
 	glEnableClientState(GL_VERTEX_ARRAY);
 
