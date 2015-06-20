@@ -24,8 +24,8 @@
 
 float zNear = 0.1, zFar = 50.0;
 
-#define USE_KINECT_INTRINSICS 1
-float ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0;
+//#define USE_KINECT_INTRINSICS 1
+//float ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0;
 
 //manual zoom
 float zoom = 1.f;
@@ -38,6 +38,9 @@ bool auto_rotate = true;
 #define ZOOM_VALUE 0.1
 #define ROTATE_VALUE 1
 #define ANIM_DEFAULT_FPS 12
+
+#define ROTATION_THRESHOLD 0.02
+#define TRANSLATION_THRESHOLD 0.02
 
 //window dimensions
 int win_width, win_height;
@@ -74,26 +77,50 @@ cv::Vec3b clear_color(0x01, 0x01, 0x01);
 
 float tsdf_offset = 0;
 
+std::vector<cv::Mat> bodypart_previoustransform;
+
 /* ---------------------------------------------------------------------------- */
 void reshape(int width, int height)
 {
-	const double aspectRatio = (float)width / height, fieldOfView = fovy;
-
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-
-	if (USE_KINECT_INTRINSICS){
-		int viewport[4];
-		cv::Mat proj_t = build_opengl_projection_for_intrinsics(viewport, -ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0+10, width, height, zNear, zFar).t(); //note: ki_alpha is negative. NOTE2: the +10 is FUDGE
-		glMultMatrixf(proj_t.ptr<float>());
-	}
-	else{
-		gluPerspective(fieldOfView, aspectRatio,
-			zNear, zFar);  /* Znear and Zfar */
-	}
+	//const double aspectRatio = (float)width / height, fieldOfView = fovy;
+	//
+	//glMatrixMode(GL_PROJECTION);
+	//glLoadIdentity();
+	//
+	//if (USE_KINECT_INTRINSICS){
+	//	int viewport[4];
+	//	cv::Mat proj_t = build_opengl_projection_for_intrinsics(viewport, -ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0+10, width, height, zNear, zFar, -1).t(); //note: ki_alpha is negative. NOTE2: the +10 is FUDGE
+	//	glMultMatrixf(proj_t.ptr<float>());
+	//}
+	//else{
+	//	gluPerspective(fieldOfView, aspectRatio,
+	//		zNear, zFar);  /* Znear and Zfar */
+	//}
 	glViewport(0, 0, width, height);
 	win_width = width;
 	win_height = height;
+
+	//opengl_projection.create(4, 4, CV_32F);
+	//glGetFloatv(GL_PROJECTION_MATRIX, (GLfloat*)opengl_projection.data);
+	//opengl_projection = opengl_projection.t();
+}
+
+void set_projection_matrix(cv::Mat camera_matrix){
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	float ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0;
+	ki_alpha = camera_matrix.ptr<float>(0)[0];
+	ki_beta = camera_matrix.ptr<float>(1)[1];
+	ki_gamma = camera_matrix.ptr<float>(0)[1];
+	ki_u0 = camera_matrix.ptr<float>(0)[2];
+	ki_v0 = camera_matrix.ptr<float>(1)[2];
+	int viewport[4];
+	cv::Mat proj_t = build_opengl_projection_for_intrinsics_2(viewport, -ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0+10, win_width, win_height, zNear, zFar).t(); //im not proud of this
+	glMultMatrixf(proj_t.ptr<float>());
+	
+
+	glViewport(0, 0, win_width, win_height);
 
 	opengl_projection.create(4, 4, CV_32F);
 	glGetFloatv(GL_PROJECTION_MATRIX, (GLfloat*)opengl_projection.data);
@@ -145,8 +172,36 @@ void display(void)
 	int facing;
 	bool loaded = load_input_frame(filenames[anim_frame], time, camera_pose, camera_matrix, root, color, fullcolor, depth, facing);
 
+	//if (loaded && anim_frame < filenames.size()-1){ //this is bad shit
+	//	//we gonna skip 1 fullcolor
+	//	double time_;
+	//	cv::Mat camera_matrix_, camera_pose_;
+	//	SkeletonNodeHard root_;
+	//	cv::Mat color_, depth_;
+	//	int facing_;
+	//	loaded = load_input_frame(filenames[anim_frame+1], time_, camera_pose_, camera_matrix_, root_, color_, fullcolor, depth_, facing_);
+	//}
+
+	//shitty hack because some frames didnt get loaded in
+	if (loaded && fullcolor.empty()){
+		std::stringstream ss;
+		ss << video_directory << "/rgbx" << anim_frame << ".png";
+		fullcolor = cv::imread(ss.str());
+	}
+
+	cv::Range rotation_range[2];
+	rotation_range[0] = rotation_range[1] = cv::Range(0, 3);
+	cv::Range translation_range[2];
+	translation_range[0] = cv::Range(0, 3);
+	translation_range[1] = cv::Range(3, 4);
+
 	if (loaded){
 
+		set_projection_matrix(camera_matrix);
+
+		glMatrixMode(GL_MODELVIEW);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glLoadIdentity();
 		{
 			//opengl_modelview = frame_datas[anim_frame].mmCameraPose;
 			opengl_modelview = camera_pose;
@@ -157,6 +212,31 @@ void display(void)
 
 		SkeletonNodeHardMap snhmap;
 		cv_draw_and_build_skeleton(&root, cv::Mat::eye(4, 4, CV_32F), camera_matrix, camera_pose, &snhmap);
+
+		std::vector<bool> bodypart_validity(bpdv.size(), true);
+
+		if (bodypart_previoustransform.empty()){
+			bodypart_previoustransform.resize(bpdv.size());
+		}
+		else{
+			for (int i = 0; i < bpdv.size(); ++i){
+				cv::Mat currenttransform = get_bodypart_transform(bpdv[i], snhmap, cv::Mat::eye(4, 4, CV_32F));
+				cv::Vec3f current_rot;
+				cv::Rodrigues(currenttransform(rotation_range), current_rot);
+				cv::Vec3f current_trans = currenttransform(translation_range);
+
+				cv::Vec3f prev_rot;
+				cv::Rodrigues(bodypart_previoustransform[i](rotation_range), prev_rot);
+				cv::Vec3f prev_trans = bodypart_previoustransform[i](translation_range);
+
+				float rot_dist = cv::norm(current_rot - prev_rot);
+				float trans_dist = cv::norm(current_trans - prev_trans);
+
+				if (rot_dist > ROTATION_THRESHOLD || trans_dist > TRANSLATION_THRESHOLD){
+					bodypart_validity[i] = false;
+				}
+			}
+		}
 
 		glEnableClientState(GL_VERTEX_ARRAY);
 
@@ -207,7 +287,86 @@ void display(void)
 			cv::flip(render_depth_, render_depth, 0);
 		}
 
-		process_and_save_occlusions(render_pretexture, render_depth, anim_frame, bpdv, clear_color, color, fullcolor, facing, video_directory);
+		//now do the individual bps, but move the mforward 5cm
+		std::vector<cv::Mat> bodypart_render_pretexture(bpdv.size());
+
+		for (int i2 = 0; i2 < bpdv.size(); ++i2){
+
+			glMatrixMode(GL_MODELVIEW);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			glLoadIdentity();
+			{
+				//opengl_modelview = frame_datas[anim_frame].mmCameraPose;
+				opengl_modelview = camera_pose;
+				cv::Mat opengl_modelview_t = opengl_modelview.t();
+				glMultMatrixf(opengl_modelview_t.ptr<float>());
+			}
+
+
+			SkeletonNodeHardMap snhmap;
+			cv_draw_and_build_skeleton(&root, cv::Mat::eye(4, 4, CV_32F), camera_matrix, camera_pose, &snhmap);
+
+			glEnableClientState(GL_VERTEX_ARRAY);
+
+			for (int i = 0; i < bpdv.size(); ++i){
+
+				glPushMatrix();
+
+				if (i == i2){
+					glLoadIdentity();
+					//glTranslatef(0, 0, 0.5f);
+					//glScalef(0.5, 0.5, 0.5);
+					cv::Mat bpt = get_bodypart_transform(bpdv[i], snhmap, cv::Mat::eye(4, 4, CV_32F));
+					cv::Vec3f trans = bpt(cv::Range(0, 3), cv::Range(3, 4));
+					cv::Vec3f trans2 = cv::normalize(trans) * -0.1;
+					glTranslatef(trans2(0), trans2(1), trans2(2));
+
+					cv::Mat opengl_modelview_t = opengl_modelview.t();
+					glMultMatrixf(opengl_modelview_t.ptr<float>());
+
+				}
+
+				cv::Mat transform_t = (get_bodypart_transform(bpdv[i], snhmap, cv::Mat::eye(4, 4, CV_32F)) * get_voxel_transform(voxels[i].width, voxels[i].height, voxels[i].depth, voxel_size)).t();
+				glMultMatrixf(transform_t.ptr<float>());
+
+				glVertexPointer(3, GL_FLOAT, 0, triangle_vertices[i].data());
+				glColorPointer(3, GL_UNSIGNED_BYTE, 0, triangle_colors[i].data());
+
+				glColor3fv(bpdv[i].mColor);
+
+				glDrawElements(GL_TRIANGLES, triangle_indices[i].size(), GL_UNSIGNED_INT, triangle_indices[i].data());
+
+				glPopMatrix();
+			}
+
+			glDisableClientState(GL_VERTEX_ARRAY);
+
+
+
+			//now take the different body part colors and map em to the proper textures
+
+			cv::Mat render_pretexture;
+			{
+				unsigned char * cp;
+				cp = (unsigned char*)malloc(win_width*win_height*sizeof(unsigned char) * 3);
+				glReadPixels(0, 0, win_width, win_height, GL_BGR_EXT, GL_UNSIGNED_BYTE, cp);
+
+				cv::Mat render_pretexture_ = cv::Mat(win_height, win_width, CV_8UC3, cp).clone();
+
+				free(cp);
+
+				cv::flip(render_pretexture_, render_pretexture, 0);
+			}
+
+			bodypart_render_pretexture[i2] = render_pretexture;
+		}
+
+		//process_and_save_occlusions(render_pretexture, render_depth, anim_frame, bpdv, clear_color, color, fullcolor, facing, video_directory);
+		process_and_save_occlusions_expanded(render_pretexture, bodypart_render_pretexture, render_depth, anim_frame, bpdv, clear_color, fullcolor, fullcolor, facing, video_directory, bodypart_validity);
+
+		for (int i = 0; i < bpdv.size(); ++i){
+			bodypart_previoustransform[i] = get_bodypart_transform(bpdv[i], snhmap, cv::Mat::eye(4, 4, CV_32F));
+		}
 
 	}
 	else{
@@ -235,15 +394,15 @@ void display(void)
 int main(int argc, char **argv)
 {
 
-	if (USE_KINECT_INTRINSICS){
-		cv::FileStorage fs;
-		fs.open("out_cameramatrix_test.yml", cv::FileStorage::READ);
-		fs["alpha"] >> ki_alpha;
-		fs["beta"] >> ki_beta;
-		fs["gamma"] >> ki_gamma;
-		fs["u"] >> ki_u0;
-		fs["v"] >> ki_v0;
-	}
+	//if (USE_KINECT_INTRINSICS){
+	//	cv::FileStorage fs;
+	//	fs.open("out_cameramatrix_test.yml", cv::FileStorage::READ);
+	//	fs["alpha"] >> ki_alpha;
+	//	fs["beta"] >> ki_beta;
+	//	fs["gamma"] >> ki_gamma;
+	//	fs["u"] >> ki_u0;
+	//	fs["v"] >> ki_v0;
+	//}
 
 	std::string voxel_recons_path;
 	int numframes = 10;

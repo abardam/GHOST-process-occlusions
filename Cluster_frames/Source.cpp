@@ -46,14 +46,14 @@ int main(int argc, char **argv)
 
 	}
 
-	load_processed_frames(filenames, bpdv.size(), frame_datas_processed);
+	load_processed_frames(filenames, ".xml.gz", bpdv.size(), frame_datas_processed, false);
 
 	for (int i = 0; i < frame_datas_processed.size(); ++i){
 		snhmaps.push_back(SkeletonNodeHardMap());
-		cv_draw_and_build_skeleton(&frame_datas_processed[i].mRoot, frame_datas_processed[i].mCameraPose, frame_datas_processed[i].mCameraMatrix, &snhmaps[i]);
+		cv_draw_and_build_skeleton(&frame_datas_processed[i].mRoot, cv::Mat::eye(4, 4, CV_32F), frame_datas_processed[i].mCameraMatrix, frame_datas_processed[i].mCameraPose, &snhmaps[i]);
 	}
 
-	BodypartFrameCluster bodypart_frame_clusters = cluster_frames(64, bpdv, snhmaps, frame_datas_processed, 2147483647);
+	BodypartFrameCluster bodypart_frame_clusters = cluster_frames(5, bpdv, snhmaps, frame_datas_processed, 2147483647);
 
 	filenameSS.str("");
 	filenameSS << video_directory << "/clusters-" << "startframe" << startframe << "numframes" << numframes << ".xml.gz";
