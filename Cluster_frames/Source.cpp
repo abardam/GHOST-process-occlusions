@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 		cv_draw_and_build_skeleton(&frame_datas_processed[i].mRoot, cv::Mat::eye(4, 4, CV_32F), frame_datas_processed[i].mCameraMatrix, frame_datas_processed[i].mCameraPose, &snhmaps[i]);
 	}
 
-	BodypartFrameCluster bodypart_frame_clusters = cluster_frames(5, bpdv, snhmaps, frame_datas_processed, 2147483647);
+	BodypartFrameCluster bodypart_frame_clusters = cluster_frames(5, bpdv, snhmaps, frame_datas_processed, 50);
 
 	filenameSS.str("");
 	filenameSS << video_directory << "/clusters-" << "startframe" << startframe << "numframes" << numframes << ".xml.gz";

@@ -46,6 +46,7 @@
     <Import Project="$(PROPERTY_SHEETS_DIR)\AssimpOpenGL.props" />
     <Import Project="$(PROPERTY_SHEETS_DIR)\ReconsOptimization.props" />
     <Import Project="$(PROPERTY_SHEETS_DIR)\CvDraw.props" />
+    <Import Project="C:\Users\fabian-d\Documents\Visual Studio 2013\Projects\PROPERTY SHEETS\ReconsVoxel.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup />

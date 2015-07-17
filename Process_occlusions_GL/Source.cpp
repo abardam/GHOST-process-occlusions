@@ -21,11 +21,29 @@
 
 #include <glcv.h>
 #include <gh_occlusion.h>
+#include <gh_texture.h>
+
+#include <Windows.h>
 
 float zNear = 0.1, zFar = 50.0;
 
 //#define USE_KINECT_INTRINSICS 1
 //float ki_alpha, ki_beta, ki_gamma, ki_u0, ki_v0;
+
+#define TEXTURE_MAP_CYLINDER 0
+#define TEXTURE_MAP_TRIANGLES 1
+#define TEXTURE_DIMS 2048
+
+#if TEXTURE_MAP_CYLINDER == 1
+std::vector<cv::Mat> bodypart_textures_cylinder;
+std::vector<cv::Mat> bodypart_textureweights_cylinder;
+#endif
+
+#if TEXTURE_MAP_TRIANGLES == 1
+std::vector<cv::Mat> bodypart_textures_triangles;
+std::vector<cv::Mat> bodypart_textureweights_triangles;
+std::vector<std::vector<std::vector<unsigned int>>> bodypart_triangle_UV;
+#endif
 
 //manual zoom
 float zoom = 1.f;
@@ -164,6 +182,8 @@ void display(void)
 	
 
 	static int anim_frame = 0;
+
+	std::cout << "Processing frame " << anim_frame << std::endl;
 
 	double time;
 	cv::Mat camera_matrix, camera_pose;
@@ -362,7 +382,16 @@ void display(void)
 		}
 
 		//process_and_save_occlusions(render_pretexture, render_depth, anim_frame, bpdv, clear_color, color, fullcolor, facing, video_directory);
-		process_and_save_occlusions_expanded(render_pretexture, bodypart_render_pretexture, render_depth, anim_frame, bpdv, clear_color, fullcolor, fullcolor, facing, video_directory, bodypart_validity);
+		//process_and_save_occlusions_expanded(render_pretexture, bodypart_render_pretexture, render_depth, anim_frame, bpdv, clear_color, color, fullcolor, facing, video_directory, bodypart_validity);
+		process_and_save_occlusions_expanded(render_pretexture, bodypart_render_pretexture, render_depth, anim_frame, bpdv, clear_color, color, fullcolor, facing, video_directory);
+
+#if TEXTURE_MAP_CYLINDER == 1
+		process_occlusions_texturemap_cylinder(render_pretexture, bodypart_render_pretexture, render_depth, anim_frame, bpdv, snhmap, clear_color, color, fullcolor, facing, camera_matrix, voxels, voxel_size, bodypart_textures_cylinder, bodypart_textureweights_cylinder);
+#endif
+#if TEXTURE_MAP_TRIANGLES == 1
+		process_occlusions_texturemap_triangles(triangle_indices, triangle_vertices, bodypart_triangle_UV, render_depth, anim_frame, bpdv, snhmap, clear_color, color, fullcolor, facing, camera_matrix, voxels, voxel_size, bodypart_textures_triangles, bodypart_textureweights_triangles);
+
+#endif
 
 		for (int i = 0; i < bpdv.size(); ++i){
 			bodypart_previoustransform[i] = get_bodypart_transform(bpdv[i], snhmap, cv::Mat::eye(4, 4, CV_32F));
@@ -378,10 +407,76 @@ void display(void)
 
 	++anim_frame;
 
+	//debug
+	
 	if (anim_frame >= filenames.size()){
 		std::cout << "FINISHED" << std::endl;
 
 		//time to cluster frames!
+
+		//time to save textures!
+#if TEXTURE_MAP_CYLINDER == 1
+
+
+		std::string cylinder_texture_dir = video_directory + "/cylinder_textures/";
+
+		CreateDirectory(cylinder_texture_dir.c_str(), NULL);
+
+		std::stringstream ss;
+		cv::FileStorage fs;
+
+		for (int i = 0; i < bpdv.size(); ++i){
+			ss.str("");
+			ss << cylinder_texture_dir << "/weight" << i << ".xml";
+			fs.open(ss.str(), cv::FileStorage::WRITE);
+			fs << "weight" << bodypart_textureweights_cylinder[i];
+			fs.release();
+
+			ss.str("");
+			ss << cylinder_texture_dir << "/texture" << i << ".png";
+			cv::imwrite(ss.str(), bodypart_textures_cylinder[i]);
+		}
+#endif
+
+		//time to save textures!
+#if TEXTURE_MAP_TRIANGLES == 1
+
+
+		std::string triangle_texture_dir = video_directory + "/triangle_textures/";
+
+		CreateDirectory(triangle_texture_dir.c_str(), NULL);
+
+		std::stringstream ss;
+		cv::FileStorage fs;
+
+		for (int i = 0; i < bpdv.size(); ++i){
+			ss.str("");
+			ss << triangle_texture_dir << "/weight" << i << ".xml";
+			fs.open(ss.str(), cv::FileStorage::WRITE);
+			fs << "weight" << bodypart_textureweights_triangles[i];
+			fs.release();
+
+			ss.str("");
+			ss << triangle_texture_dir << "/texture" << i << ".png";
+			cv::imwrite(ss.str(), bodypart_textures_triangles[i]);
+
+			ss.str("");
+			ss << triangle_texture_dir << "/UV" << i << ".xml";
+			fs.open(ss.str(), cv::FileStorage::WRITE);
+			fs << "UV" << "[";
+			for (int j = 0; j < bodypart_triangle_UV[i].size(); ++j){
+				fs << "{" 
+					<< "U1" << (int)bodypart_triangle_UV[i][j][0]
+					<< "V1" << (int)bodypart_triangle_UV[i][j][1]
+					<< "U2" << (int)bodypart_triangle_UV[i][j][2]
+					<< "V2" << (int)bodypart_triangle_UV[i][j][3]
+					<< "U3" << (int)bodypart_triangle_UV[i][j][4]
+					<< "V3" << (int)bodypart_triangle_UV[i][j][5]
+					<< "}";
+			}
+			fs << "]";
+		}
+#endif
 
 		glutDestroyWindow(window1);
 		exit(0);
@@ -580,6 +675,27 @@ int main(int argc, char **argv)
 	glutGet(GLUT_ELAPSED_TIME);
 
 	opengl_modelview = cv::Mat::eye(4, 4, CV_32F);
+
+#if TEXTURE_MAP_CYLINDER == 1
+	bodypart_textures_cylinder.resize(bpdv.size());
+	bodypart_textureweights_cylinder.resize(bpdv.size());
+
+	for (int i = 0; i < bpdv.size(); ++i){
+		bodypart_textures_cylinder[i] = cv::Mat(TEXTURE_DIMS, TEXTURE_DIMS, CV_8UC3, cv::Scalar(0, 0, 0));
+		bodypart_textureweights_cylinder[i] = cv::Mat(TEXTURE_DIMS, TEXTURE_DIMS, CV_32F, cv::Scalar(0));
+	}
+#endif
+#if TEXTURE_MAP_TRIANGLES == 1
+	bodypart_textures_triangles.resize(bpdv.size());
+	bodypart_textureweights_triangles.resize(bpdv.size());
+	bodypart_triangle_UV.resize(bpdv.size());
+
+	for (int i = 0; i < bpdv.size(); ++i){
+		bodypart_textures_triangles[i] = cv::Mat(TEXTURE_DIMS, TEXTURE_DIMS, CV_8UC3, cv::Scalar(0, 0, 0));
+		bodypart_textureweights_triangles[i] = cv::Mat(TEXTURE_DIMS, TEXTURE_DIMS, CV_32F, cv::Scalar(0));
+		bodypart_triangle_UV[i] = generate_triangle_UV(triangle_indices[i], triangle_vertices[i], TEXTURE_DIMS, TEXTURE_DIMS);
+	}
+#endif
 
 	glutMainLoop();
 
